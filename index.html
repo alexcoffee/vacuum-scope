@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b1212" />
+    <title>Terranova 934 · Pressure Monitor</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <a class="brand" href="#" aria-label="Terranova pressure monitor home">
+          <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span>Terranova <b>934</b></span>
+        </a>
+        <div class="header-actions">
+          <span class="status" id="status"><i></i><span>Demo signal</span></span>
+          <button class="theme-toggle" id="themeToggle" type="button" aria-label="Switch to light mode" title="Switch to light mode">
+            <span aria-hidden="true">☀</span><span class="theme-label">Light</span>
+          </button>
+          <button class="button button-secondary" id="demoButton">Stop demo</button>
+          <button class="button button-primary" id="connectButton">
+            <span class="usb-icon" aria-hidden="true">⌁</span> Connect device
+          </button>
+        </div>
+      </header>
+
+      <main>
+        <section class="intro">
+          <div>
+            <p class="eyebrow">VACUUM SYSTEM / LIVE MONITOR</p>
+            <h1>Pressure</h1>
+          </div>
+          <p class="lede">
+            Live readings from the ion and low-vacuum gauges, plotted on a logarithmic scale.
+            Connect your controller over RS-232 to begin a hardware session.
+          </p>
+        </section>
+
+        <section class="reading-grid" aria-label="Current pressure readings">
+          <article class="reading-card active" data-gauge="ion">
+            <div class="reading-heading"><span class="gauge-dot ion"></span><span>Ion gauge</span><small>F</small></div>
+            <div class="reading-value" id="ionValue">2.4 × 10<sup>−7</sup></div>
+            <div class="reading-meta"><span>Torr</span><span class="trend down" id="ionTrend">↘ 18.4%</span></div>
+          </article>
+          <article class="reading-card" data-gauge="a">
+            <div class="reading-heading"><span class="gauge-dot gauge-a"></span><span>Gauge A</span><small>G</small></div>
+            <div class="reading-value" id="aValue">3.1 × 10<sup>−3</sup></div>
+            <div class="reading-meta"><span>Torr</span><span class="trend down" id="aTrend">↘ 4.8%</span></div>
+          </article>
+          <article class="reading-card" data-gauge="b">
+            <div class="reading-heading"><span class="gauge-dot gauge-b"></span><span>Gauge B</span><small>H</small></div>
+            <div class="reading-value" id="bValue">7.6 × 10<sup>1</sup></div>
+            <div class="reading-meta"><span>Torr</span><span class="trend up" id="bTrend">↗ 0.6%</span></div>
+          </article>
+        </section>
+
+        <section class="chart-panel">
+          <div class="panel-head">
+            <div>
+              <h2>Pressure history</h2>
+              <p id="sessionLabel">Demo session · live</p>
+            </div>
+            <div class="panel-actions">
+              <div class="segmented" id="rangeButtons" aria-label="Chart time range">
+                <button data-range="60">1 min</button>
+                <button class="selected" data-range="300">5 min</button>
+                <button data-range="900">15 min</button>
+              </div>
+              <button class="icon-button" id="exportButton" title="Export readings as CSV" aria-label="Export readings as CSV">⇩</button>
+            </div>
+          </div>
+
+          <div class="legend" id="legend">
+            <button data-gauge="ion"><i class="ion"></i> Ion gauge</button>
+            <button data-gauge="a"><i class="gauge-a"></i> Gauge A</button>
+            <button data-gauge="b"><i class="gauge-b"></i> Gauge B</button>
+          </div>
+
+          <div class="chart-wrap">
+            <canvas id="pressureChart" aria-label="Logarithmic pressure history chart"></canvas>
+            <div class="tooltip" id="tooltip" hidden></div>
+          </div>
+          <div class="chart-footer">
+            <span>PRESSURE (TORR) · LOG SCALE</span>
+            <span><i class="pulse"></i> Sampling every 2 seconds per channel</span>
+          </div>
+        </section>
+
+        <section class="connection-note">
+          <div class="note-icon">⌁</div>
+          <div>
+            <h3>Hardware connection</h3>
+            <p>Use a USB-to-RS-232 adapter and a supported Chromium browser. Default controller format: 9600 baud, 8 data bits, no parity, 1 stop bit.</p>
+          </div>
+          <a href="https://www.duniway.com/sites/default/files/images/_pg/Terranova934-Manual.pdf" target="_blank" rel="noreferrer">View manual ↗</a>
+        </section>
+      </main>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

@@ -2,6 +2,8 @@
 
 A dependency-free web app for plotting live pressure data from a Terranova Model 934 / 934-UHV vacuum gauge controller.
 
+![Vacuum pressure monitor dashboard](./Screenshot.png)
+
 ## Run
 
 Web Serial requires a secure context. Serve the folder locally:

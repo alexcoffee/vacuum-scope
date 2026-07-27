@@ -41,19 +41,48 @@
         <section class="reading-grid" aria-label="Current pressure readings">
           <article class="reading-card active" data-gauge="ion">
             <div class="reading-heading"><span class="gauge-dot ion"></span><span>Ion gauge</span><small>F</small></div>
-            <div class="reading-value" id="ionValue">2.4 × 10<sup>−7</sup></div>
-            <div class="reading-meta"><span>Torr</span><span class="trend down" id="ionTrend">↘ 18.4%</span></div>
+            <div class="reading-value" id="ionDisplay">240 nTorr</div>
+            <div class="reading-details">
+              <span class="reading-scientific" id="ionValue">2.4 × 10<sup>−7</sup> Torr</span>
+              <span class="trend down" id="ionTrend">↘ 18.4%</span>
+            </div>
           </article>
           <article class="reading-card" data-gauge="a">
             <div class="reading-heading"><span class="gauge-dot gauge-a"></span><span>Gauge A</span><small>G</small></div>
-            <div class="reading-value" id="aValue">3.1 × 10<sup>−3</sup></div>
-            <div class="reading-meta"><span>Torr</span><span class="trend down" id="aTrend">↘ 4.8%</span></div>
+            <div class="reading-value" id="aDisplay">3.1 mTorr</div>
+            <div class="reading-details">
+              <span class="reading-scientific" id="aValue">3.1 × 10<sup>−3</sup> Torr</span>
+              <span class="trend down" id="aTrend">↘ 4.8%</span>
+            </div>
           </article>
           <article class="reading-card" data-gauge="b">
             <div class="reading-heading"><span class="gauge-dot gauge-b"></span><span>Gauge B</span><small>H</small></div>
-            <div class="reading-value" id="bValue">7.6 × 10<sup>1</sup></div>
-            <div class="reading-meta"><span>Torr</span><span class="trend up" id="bTrend">↗ 0.6%</span></div>
+            <div class="reading-value" id="bDisplay">76 Torr</div>
+            <div class="reading-details">
+              <span class="reading-scientific" id="bValue">7.6 × 10<sup>1</sup> Torr</span>
+              <span class="trend up" id="bTrend">↗ 0.6%</span>
+            </div>
           </article>
+        </section>
+
+        <section class="vacuum-panel" aria-label="Vacuum particle simulation">
+          <p class="eyebrow">MOLECULAR VIEW</p>
+          <div class="chamber-wrap">
+            <canvas id="vacuumCanvas" aria-label="Animated vacuum chamber showing particles moving and colliding"></canvas>
+          </div>
+          <div class="vacuum-footer">
+            <div class="density-scale" aria-hidden="true">
+              <span>High vacuum</span><i><b id="densityMarker"></b></i><span>Atmosphere</span>
+            </div>
+            <div class="rate-indicator stable" id="rateIndicator" role="status" aria-live="polite">
+              <span>Rate of change</span>
+              <strong id="rateValue">—</strong>
+            </div>
+            <div class="physics-indicator" role="status" aria-live="polite">
+              <span>Distance between collisions</span>
+              <strong id="meanFreePath">—</strong>
+            </div>
+          </div>
         </section>
 
         <section class="chart-panel">

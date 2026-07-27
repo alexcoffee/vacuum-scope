@@ -24,8 +24,20 @@ const state = {
 const $ = (selector) => document.querySelector(selector);
 const canvas = $("#pressureChart");
 const ctx = canvas.getContext("2d");
+const vacuumCanvas = $("#vacuumCanvas");
+const vacuumCtx = vacuumCanvas.getContext("2d");
 const themeToggle = $("#themeToggle");
 const themeColor = document.querySelector('meta[name="theme-color"]');
+
+const vacuum = {
+  gauge: "ion",
+  particles: [],
+  targetCount: 0,
+  speedFactor: 1,
+  collisions: 0,
+  collisionSamples: [],
+  lastTime: performance.now(),
+};
 
 function setTheme(theme, persist = true) {
   const dark = theme === "dark";
@@ -44,12 +56,14 @@ setTheme(savedTheme || (matchMedia("(prefers-color-scheme: dark)").matches ? "da
 
 function seedDemo() {
   const now = Date.now();
+  let gaugeBPressure = 70;
   for (let i = 150; i >= 0; i--) {
     const t = now - i * 2000;
     const progress = 150 - i;
+    gaugeBPressure += (760 - gaugeBPressure) * .035;
     addPoint("ion", t, 7.8e-6 * Math.exp(-progress / 43) * (1 + Math.sin(i / 7) * .07), false);
     addPoint("a", t, 1.7e-2 * Math.exp(-progress / 85) * (1 + Math.sin(i / 11) * .05), false);
-    addPoint("b", t, 70 + Math.sin(i / 13) * 7 + progress * .04, false);
+    addPoint("b", t, Math.min(760, gaugeBPressure + Math.sin(i / 9) * 2.5), false);
   }
 }
 
@@ -89,16 +103,190 @@ function formatScientific(value) {
   return `${mantissa.toFixed(1)} × 10<sup>${exp}</sup>`;
 }
 
+function formatPressureUnit(value) {
+  const units = [
+    { threshold: 1e3, scale: 1e-3, suffix: "kTorr" },
+    { threshold: 1, scale: 1, suffix: "Torr" },
+    { threshold: 1e-3, scale: 1e3, suffix: "mTorr" },
+    { threshold: 1e-6, scale: 1e6, suffix: "µTorr" },
+    { threshold: 1e-9, scale: 1e9, suffix: "nTorr" },
+    { threshold: 0, scale: 1e12, suffix: "pTorr" },
+  ];
+  const unit = units.find((candidate) => value >= candidate.threshold);
+  const scaled = value * unit.scale;
+  const precision = scaled >= 100 ? 0 : scaled >= 10 ? 1 : 2;
+  const number = scaled.toLocaleString(undefined, { maximumFractionDigits: precision });
+  return `${number} ${unit.suffix}`;
+}
+
 function updateReading(gauge) {
   const points = state.data[gauge];
   if (!points.length) return;
   const latest = points.at(-1).value;
-  $(`#${gauge}Value`).innerHTML = formatScientific(latest);
+  $(`#${gauge}Display`).textContent = formatPressureUnit(latest);
+  $(`#${gauge}Value`).innerHTML = `${formatScientific(latest)} Torr`;
   const prior = points.find((point) => point.time >= points.at(-1).time - 30000) || points[0];
   const change = ((latest - prior.value) / prior.value) * 100;
   const trend = $(`#${gauge}Trend`);
   trend.textContent = `${change <= 0 ? "↘" : "↗"} ${Math.abs(change).toFixed(1)}%`;
   trend.className = `trend ${change <= 0 ? "down" : "up"}`;
+  if (gauge === vacuum.gauge) {
+    updateVacuumTarget();
+    updateRateIndicator();
+    updateMeanFreePath();
+  }
+}
+
+function updateVacuumTarget() {
+  const value = state.data[vacuum.gauge].at(-1)?.value || 1e-10;
+  const normalized = Math.max(0, Math.min(1, (Math.log10(value) + 10) / 13));
+  // Keep sparse vacuum states readable while delaying dense particle packing
+  // until higher pressures (about 24 particles at 0.01 Torr).
+  vacuum.targetCount = Math.round(12 + normalized ** 5.2 * 150);
+  // Molecular motion accelerates most noticeably as pressure approaches atmosphere.
+  vacuum.speedFactor = .25 + normalized ** 4 * 3.25;
+  $("#densityMarker").style.left = `${normalized * 100}%`;
+}
+
+function updateRateIndicator() {
+  const points = state.data[vacuum.gauge];
+  const indicator = $("#rateIndicator");
+  const value = $("#rateValue");
+  if (points.length < 2) {
+    indicator.className = "rate-indicator stable";
+    value.textContent = "—";
+    return;
+  }
+
+  const latest = points.at(-1);
+  // A rolling window damps sample-to-sample noise without hiding meaningful changes.
+  const cutoff = latest.time - 30000;
+  const prior = points.find((point) => point.time >= cutoff);
+  const elapsedMinutes = (latest.time - prior.time) / 60000;
+  if (!prior || elapsedMinutes < .13) {
+    indicator.className = "rate-indicator stable";
+    value.textContent = "—";
+    return;
+  }
+
+  const logarithmicRate = (Math.log10(latest.value) - Math.log10(prior.value)) / elapsedMinutes;
+  const pressureRate = (latest.value - prior.value) / elapsedMinutes;
+  if (Math.abs(logarithmicRate) < .03) {
+    indicator.className = "rate-indicator stable";
+    value.textContent = "Stable";
+  } else {
+    const falling = pressureRate < 0;
+    indicator.className = `rate-indicator ${falling ? "falling" : "rising"}`;
+    value.textContent = `${falling ? "↓" : "↑"} ${formatPressureUnit(Math.abs(pressureRate))}/min`;
+  }
+}
+
+function updateMeanFreePath() {
+  const pressureTorr = state.data[vacuum.gauge].at(-1)?.value;
+  if (!Number.isFinite(pressureTorr) || pressureTorr <= 0) {
+    $("#meanFreePath").textContent = "—";
+    return;
+  }
+
+  // Kinetic-theory estimate for air at 20 °C using a 0.365 nm molecular diameter.
+  const pressurePa = pressureTorr * 133.322;
+  const boltzmann = 1.380649e-23;
+  const temperatureK = 293.15;
+  const molecularDiameterM = 3.65e-10;
+  const distanceM = (boltzmann * temperatureK) /
+    (Math.sqrt(2) * Math.PI * molecularDiameterM ** 2 * pressurePa);
+  $("#meanFreePath").textContent = formatDistance(distanceM);
+}
+
+function formatDistance(meters) {
+  const units = [
+    { limit: 1e-6, scale: 1e9, suffix: "nm" },
+    { limit: 1e-3, scale: 1e6, suffix: "µm" },
+    { limit: 1, scale: 1e3, suffix: "mm" },
+    { limit: 1e3, scale: 1, suffix: "m" },
+    { limit: Infinity, scale: 1e-3, suffix: "km" },
+  ];
+  const unit = units.find((candidate) => meters < candidate.limit);
+  const scaled = meters * unit.scale;
+  const precision = scaled >= 100 ? 0 : scaled >= 10 ? 1 : 2;
+  return `${scaled.toFixed(precision)} ${unit.suffix}`;
+}
+
+function selectVacuumGauge(gauge) {
+  vacuum.gauge = gauge;
+  document.querySelectorAll(".reading-card").forEach((card) => card.classList.toggle("active", card.dataset.gauge === gauge));
+  updateVacuumTarget();
+  updateRateIndicator();
+  updateMeanFreePath();
+}
+
+function addVacuumParticle(w, h) {
+  const radius = 3 + Math.random() * 1.6;
+  const angle = Math.random() * Math.PI * 2;
+  const speed = 33 + Math.random() * 31;
+  vacuum.particles.push({
+    x: radius + Math.random() * Math.max(1, w - radius * 2),
+    y: radius + Math.random() * Math.max(1, h - radius * 2),
+    vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, radius,
+  });
+}
+
+function animateVacuum(now) {
+  const rect = vacuumCanvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  if (vacuumCanvas.width !== Math.round(rect.width * dpr) || vacuumCanvas.height !== Math.round(rect.height * dpr)) {
+    vacuumCanvas.width = Math.round(rect.width * dpr);
+    vacuumCanvas.height = Math.round(rect.height * dpr);
+  }
+  const w = rect.width, h = rect.height;
+  while (vacuum.particles.length < vacuum.targetCount) addVacuumParticle(w, h);
+  if (vacuum.particles.length > vacuum.targetCount) vacuum.particles.length = vacuum.targetCount;
+  const dt = Math.min(.025, (now - vacuum.lastTime) / 1000 || 0);
+  vacuum.lastTime = now;
+
+  for (const p of vacuum.particles) {
+    p.x += p.vx * dt * vacuum.speedFactor;
+    p.y += p.vy * dt * vacuum.speedFactor;
+    if (p.x < p.radius) { p.x = p.radius; p.vx = Math.abs(p.vx); }
+    if (p.x > w - p.radius) { p.x = w - p.radius; p.vx = -Math.abs(p.vx); }
+    if (p.y < p.radius) { p.y = p.radius; p.vy = Math.abs(p.vy); }
+    if (p.y > h - p.radius) { p.y = h - p.radius; p.vy = -Math.abs(p.vy); }
+  }
+  for (let i = 0; i < vacuum.particles.length; i++) {
+    for (let j = i + 1; j < vacuum.particles.length; j++) {
+      const a = vacuum.particles[i], b = vacuum.particles[j];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const minDist = a.radius + b.radius;
+      const distSq = dx * dx + dy * dy;
+      if (distSq <= 0 || distSq >= minDist * minDist) continue;
+      const dist = Math.sqrt(distSq), nx = dx / dist, ny = dy / dist;
+      const relative = (a.vx - b.vx) * nx + (a.vy - b.vy) * ny;
+      if (relative > 0) {
+        a.vx -= relative * nx; a.vy -= relative * ny;
+        b.vx += relative * nx; b.vy += relative * ny;
+        vacuum.collisions++;
+      }
+      const overlap = (minDist - dist) / 2;
+      a.x -= nx * overlap; a.y -= ny * overlap; b.x += nx * overlap; b.y += ny * overlap;
+    }
+  }
+
+  const styles = getComputedStyle(document.documentElement);
+  const color = styles.getPropertyValue(vacuum.gauge === "ion" ? "--teal" : vacuum.gauge === "a" ? "--orange" : "--gold").trim();
+  vacuumCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  vacuumCtx.clearRect(0, 0, w, h);
+  vacuumCtx.fillStyle = color;
+  vacuumCtx.shadowColor = color;
+  vacuumCtx.shadowBlur = 7;
+  for (const p of vacuum.particles) {
+    vacuumCtx.globalAlpha = .62 + (p.radius - 3) * .16;
+    vacuumCtx.beginPath(); vacuumCtx.arc(p.x, p.y, p.radius, 0, Math.PI * 2); vacuumCtx.fill();
+  }
+  vacuumCtx.globalAlpha = 1; vacuumCtx.shadowBlur = 0;
+
+  vacuum.collisionSamples.push({ time: now, count: vacuum.collisions });
+  while (vacuum.collisionSamples.length && vacuum.collisionSamples[0].time < now - 1000) vacuum.collisionSamples.shift();
+  requestAnimationFrame(animateVacuum);
 }
 
 function setStatus(kind, message) {
@@ -216,7 +404,9 @@ function startDemo() {
     const last = (key, fallback) => state.data[key].at(-1)?.value || fallback;
     addPoint("ion", now, Math.max(1.2e-9, last("ion", 2e-7) * (.965 + Math.random() * .055)), false);
     addPoint("a", now, Math.max(8e-5, last("a", 3e-3) * (.982 + Math.random() * .04)), false);
-    addPoint("b", now, 76 + Math.sin(elapsed / 15) * 9 + (Math.random() - .5) * 2, false);
+    const gaugeB = last("b", 70);
+    const atmosphericTarget = 758 + Math.sin(elapsed / 18) * 2;
+    addPoint("b", now, Math.min(760, Math.max(1, gaugeB + (atmosphericTarget - gaugeB) * .08 + (Math.random() - .5) * 1.2)), false);
     draw();
   }, 2000);
 }
@@ -325,9 +515,15 @@ $("#legend").addEventListener("click", (event) => {
   button.classList.toggle("disabled", state.hidden.has(gauge));
   draw();
 });
+document.querySelector(".reading-grid").addEventListener("click", (event) => {
+  const card = event.target.closest(".reading-card");
+  if (card) selectVacuumGauge(card.dataset.gauge);
+});
 window.addEventListener("resize", draw);
 navigator.serial?.addEventListener("disconnect", () => state.connected && disconnect());
 
 seedDemo();
+selectVacuumGauge("ion");
 startDemo();
 draw();
+requestAnimationFrame(animateVacuum);
